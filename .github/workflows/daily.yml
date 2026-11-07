@@ -30,6 +30,13 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - name: Find the bot's files
+        run: |
+          if [ ! -f matchup_bot.py ]; then
+            f=$(find . -name matchup_bot.py -not -path "./.git/*" | head -1)
+            if [ -z "$f" ]; then echo "matchup_bot.py isn't in this repo yet. Upload the bot's files first."; exit 1; fi
+            cp -r "$(dirname "$f")"/. .
+          fi
       - uses: actions/cache/restore@v5
         with:
           path: |
