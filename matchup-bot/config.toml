@@ -1,0 +1,87 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Matchup Bot settings. Edit with Notepad; lines starting with # are notes.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[notify]
+# Phone alerts through the free "ntfy" app (iPhone + Android, no account needed).
+# Install ntfy, tap +, and subscribe to this exact topic name. Anyone who knows the
+# name can read your alerts, so keep it random.
+ntfy_topic = "jake-matchups-38ff91b6"
+ntfy_server = "https://ntfy.sh"
+
+# Optional: also post alerts to a Discord channel.
+# Discord: Channel settings > Integrations > Webhooks > New Webhook > Copy URL, paste here.
+discord_webhook = ""
+
+# Max games listed per league in one notification (everything is in the report).
+max_games_per_alert = 8
+
+
+[analysis]
+# Adjust every stat for strength of schedule, so a defense that only played bad
+# offenses doesn't look elite. Strongly recommended for college.
+opponent_adjust = true
+
+# Skip any stat that is still mostly small-sample noise. 0.3 means at least 30% of
+# the spread between teams has to be real signal. Early in a season most stats fail
+# this and switch on as games pile up. Lower = more (noisier) alerts.
+min_reliability = 0.3
+
+
+[metrics]
+# Turn off any metric you don't care about by listing its key, e.g.
+# disabled = ["ast_rate", "three_rate", "first_downs"]
+#
+# Football: points, ypp, ppd, rush_ypg, rush_ypc, pass_ypg, net_ypa, cmp_pct,
+#           sack_rate, third_down, red_zone, turnovers, first_downs
+# Basketball: ortg, efg, three_pct, three_rate, two_pct, tov_rate, oreb_pct,
+#             ft_rate, paint, fastbreak, blocked, ast_rate
+disabled = []
+
+
+# ── Per-league settings ──────────────────────────────────────────────────────
+# strong_pct / weak_pct   Percentile cutoffs (100 = best in league, 0 = worst).
+#                         Flag when one unit is >= strong_pct and the unit it
+#                         faces is <= weak_pct. Raise strong / lower weak = fewer alerts.
+# min_games               Games a team needs before it's ranked.
+# lookahead_days          Days ahead to scan (1 = today's games only).
+# hide_if_overall_gap_over  Skip games where the teams' overall power percentiles
+#                         differ by more than this (filters obvious blowouts like
+#                         a top-10 team vs a bottom-50 team). 100 = never skip.
+# max_mismatches_per_game Lines listed per game.
+
+[leagues.nfl]
+enabled = true
+strong_pct = 80          # ~top 7 vs bottom 7 of 32
+weak_pct = 20
+min_games = 3
+lookahead_days = 7
+hide_if_overall_gap_over = 100
+max_mismatches_per_game = 3
+
+[leagues.ncaaf]
+enabled = true
+strong_pct = 90          # ~top 14 vs bottom 14 of 136 FBS teams
+weak_pct = 10
+min_games = 4
+lookahead_days = 7
+hide_if_overall_gap_over = 70
+max_mismatches_per_game = 3
+
+[leagues.nba]
+enabled = true
+strong_pct = 80          # ~top 6 vs bottom 6 of 30
+weak_pct = 20
+min_games = 5
+lookahead_days = 1
+hide_if_overall_gap_over = 100
+max_mismatches_per_game = 3
+
+[leagues.ncaab]
+enabled = true
+strong_pct = 90          # ~top 36 vs bottom 36 of ~365 D-I teams
+weak_pct = 10
+min_games = 3
+lookahead_days = 1
+hide_if_overall_gap_over = 70
+max_mismatches_per_game = 3
