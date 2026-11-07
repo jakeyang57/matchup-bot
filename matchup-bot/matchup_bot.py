@@ -51,7 +51,7 @@ for _stream in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
-VERSION = "1.0"
+VERSION = "1.1"
 BASE_DIR = Path(os.environ.get("MATCHUP_BOT_HOME", Path(__file__).resolve().parent))
 CACHE_DIR = BASE_DIR / "cache"
 REPORT_DIR = BASE_DIR / "site"
@@ -60,7 +60,7 @@ LOG_FILE = BASE_DIR / "logs" / "last_run.log"
 CONFIG_FILE = BASE_DIR / "config.toml"
 
 ESPN = "https://site.api.espn.com/apis/site/v2/sports"
-USER_AGENT = "Mozilla/5.0 (compatible; matchup-bot/1.0)"
+USER_AGENT = "matchup-bot/1.1"  # used only for ntfy/Discord posts
 
 log = logging.getLogger("matchup_bot")
 
@@ -247,16 +247,19 @@ def fmt_time(d) -> str:
 # Network + cache
 # ─────────────────────────────────────────────────────────────────────────────
 def fetch_json(url: str, retries: int = 3):
-    """GET a JSON document. Returns None on 404 or repeated failure."""
+    """GET a JSON document. Returns None on 404/403 or repeated failure.
+    Sends Python's own default User-Agent: ESPN's CDN refuses scripts that pose as a browser."""
     last = None
     for attempt in range(retries):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT,
-                                                       "Accept": "application/json"})
+            req = urllib.request.Request(url, headers={"Accept": "application/json"})
             with urllib.request.urlopen(req, timeout=25) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             if e.code == 404:
+                return None
+            if e.code == 403:  # refused, not a hiccup: retrying won't help
+                log.warning("ESPN refused the request (403): %s", url)
                 return None
             last = e
         except (urllib.error.URLError, TimeoutError, ConnectionError, json.JSONDecodeError, OSError) as e:
@@ -328,7 +331,7 @@ def get_scoreboards(key: str, days: list, today: dt.date, workers: int) -> dict:
     failed = sum(r is None for r in results)
     if failed:
         log.warning("%s: %d of %d scoreboard dates failed to load", key.upper(), failed, len(days))
-    return {d: (r or []) for d, r in zip(days, results)}
+    return {d: (r or []) for d, r in zip(days, results)}, failed
 
 
 def get_game(key: str, ev: dict, today: dt.date):
@@ -933,9 +936,13 @@ def run_league(key: str, cfg: dict, today: dt.date, workers: int) -> dict:
     res = {"key": key, "league": lg, "alerts": [], "new_keys": set(), "note": ""}
 
     window = [today + dt.timedelta(days=i) for i in range(max(1, int(lc["lookahead_days"])))]
-    boards = get_scoreboards(key, window, today, workers)
+    boards, failed = get_scoreboards(key, window, today, workers)
     upcoming = {e["id"]: e for evs in boards.values() for e in evs
                 if e["state"] == "pre" and season_ok(e)}
+    if failed == len(window):
+        res["note"] = "Couldn't get the schedule from ESPN this run, so nothing was checked. See the Actions log."
+        log.error("%s: ESPN returned no data for any date in the scan window.", key.upper())
+        return res
     if not upcoming:
         res["note"] = "No upcoming games in the scan window."
         log.info("%s: no upcoming games in the next %d day(s).", key.upper(), len(window))
@@ -943,7 +950,7 @@ def run_league(key: str, cfg: dict, today: dt.date, workers: int) -> dict:
 
     start = season_start(key, lc, today)
     hist_days = [start + dt.timedelta(days=i) for i in range((today - start).days + 1)]
-    hist = get_scoreboards(key, hist_days, today, workers)
+    hist, hist_failed = get_scoreboards(key, hist_days, today, workers)
     finals = {e["id"]: e for evs in hist.values() for e in evs
               if e["state"] == "post" and e["completed"] and season_ok(e)}
     names_abbr, names_full = {}, {}
@@ -994,7 +1001,7 @@ def main(argv=None) -> int:
     ap.add_argument("--test-notify", action="store_true", help="send a test notification and exit")
     ap.add_argument("--no-open", action="store_true", help="don't open the report in a browser")
     ap.add_argument("--scheduled", action="store_true", help="for Task Scheduler (implies --no-open)")
-    ap.add_argument("--workers", type=int, default=6, help="parallel downloads (default 6)")
+    ap.add_argument("--workers", type=int, default=4, help="parallel downloads (default 4)")
     args = ap.parse_args(argv)
 
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
