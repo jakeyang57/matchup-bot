@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Morning matchups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Big+Shoulders+Display:wght@600;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #F1F4F0;
+    --sheet: #FFFFFF;
+    --ink: #16241D;
+    --muted: #5C6B63;
+    --line: #DDE4DE;
+    --chalk: #C9D3CB;
+    --turf: #2B6A4C;
+    --turf-wash: #D9EADF;
+    --flag: #E6B01C;
+    --flag-ink: #6B4E00;
+    --display: "Big Shoulders Display", "Arial Narrow", sans-serif;
+    --body: "Atkinson Hyperlegible", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #101B16; --sheet: #16241D; --ink: #E6EDE8; --muted: #94A49B;
+      --line: #24352C; --chalk: #33463B; --turf: #5DB585; --turf-wash: #1D3A2B;
+      --flag: #F0C23F; --flag-ink: #F0C23F;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 16px/1.5 var(--body);
+  }
+  .wrap { max-width: 680px; margin: 0 auto; padding: 0 18px; }
+  a { color: var(--turf); }
+  :focus-visible { outline: 3px solid var(--flag); outline-offset: 2px; border-radius: 4px; }
+
+  /* Masthead */
+  .mast { padding: 28px 0 14px; }
+  .mast h1 {
+    font: 900 clamp(44px, 13vw, 76px)/0.88 var(--display);
+    letter-spacing: -0.01em; margin: 0;
+  }
+  .mast .sub { margin: 10px 0 0; color: var(--muted); font-size: 15px; }
+  .stale {
+    margin: 14px 0 0; padding: 10px 12px; border-left: 4px solid var(--flag);
+    background: var(--sheet); font-size: 14px;
+  }
+
+  /* League tabs */
+  .bar {
+    position: sticky; top: 0; z-index: 5; background: var(--paper);
+    border-bottom: 1px solid var(--line); padding: 10px 0;
+  }
+  .tabs { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    flex: none; border: 1.5px solid var(--chalk); background: transparent; color: var(--ink);
+    font: 700 14.5px/1 var(--body); padding: 9px 11px; border-radius: 999px; cursor: pointer;
+  }
+  .tab .n { font-weight: 400; color: var(--muted); margin-left: 4px; }
+  .tab[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+  .tab[aria-pressed="true"] .n { color: var(--chalk); }
+  .filter { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 14px; color: var(--muted); }
+  .filter input { width: 18px; height: 18px; accent-color: var(--turf); margin: 0; }
+
+  /* League sections */
+  .league { padding: 26px 0 6px; }
+  .lghead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .lghead h2 { font: 800 30px/1 var(--display); margin: 0; }
+  .lghead .count { color: var(--muted); font-size: 14px; margin: 0; }
+  .note { color: var(--muted); font-size: 13px; margin: 6px 0 4px; }
+  .empty { padding: 14px 0 6px; color: var(--muted); }
+
+  /* Game */
+  .game { background: var(--sheet); border-radius: 14px; padding: 16px 16px 6px; margin-top: 14px; }
+  .ghead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .matchup { font: 800 34px/0.95 var(--display); margin: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .matchup .at { font: 400 15px/1 var(--body); color: var(--muted); }
+  .when { margin: 0; font-size: 14px; color: var(--muted); white-space: nowrap; }
+  .names { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+  .even {
+    display: inline-block; margin-top: 8px; font-size: 12.5px; font-weight: 700;
+    color: var(--turf); background: var(--turf-wash); padding: 3px 9px; border-radius: 999px;
+  }
+
+  /* One mismatch */
+  .mm { border-top: 1px solid var(--line); margin-top: 14px; padding: 12px 0 10px; }
+  .mhead { display: flex; align-items: baseline; gap: 10px; }
+  .mhead h4 { margin: 0; font-size: 15px; }
+  .mhead .gap { margin-left: auto; font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .new { font-size: 11.5px; font-weight: 700; color: var(--flag-ink); border: 1.5px solid var(--flag); border-radius: 999px; padding: 0 7px; }
+
+  /* The field: league worst (left) to best (right), yard lines every 10 */
+  .field { position: relative; height: 22px; margin: 30px 14px 12px; }
+  .field::before {
+    content: ""; position: absolute; inset: 0; border-radius: 4px;
+    background:
+      linear-gradient(var(--chalk), var(--chalk)) 50% 0 / 2px 100% no-repeat,
+      repeating-linear-gradient(to right, var(--chalk) 0 1px, transparent 1px 10%),
+      var(--paper);
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+  .band {
+    position: absolute; top: 7px; height: 8px; border-radius: 4px;
+    left: calc(var(--lo) * 1%); width: calc((var(--hi) - var(--lo)) * 1%);
+    background: linear-gradient(to right, var(--flag), var(--turf));
+    transform-origin: left center;
+  }
+  .pin {
+    position: absolute; top: 3px; left: calc(var(--p) * 1%);
+    width: 16px; height: 16px; margin-left: -8px; border-radius: 50%;
+    border: 2.5px solid var(--sheet);
+  }
+  .pin.strong { background: var(--turf); box-shadow: 0 0 0 1.5px var(--turf); }
+  .pin.weak { background: var(--flag); box-shadow: 0 0 0 1.5px var(--flag-ink); }
+  .pin b {
+    position: absolute; bottom: 21px; left: 50%; transform: translateX(-50%);
+    font: 800 15px/1 var(--display); white-space: nowrap;
+  }
+  .pin.strong b { color: var(--turf); }
+  .pin.weak b { color: var(--flag-ink); }
+
+  .units { margin: 0; display: grid; gap: 6px; }
+  .unit { display: grid; grid-template-columns: 10px 1fr auto auto; align-items: baseline; gap: 4px 8px; font-size: 14.5px; line-height: 1.35; }
+  .unit::before { content: ""; width: 10px; height: 10px; border-radius: 50%; align-self: start; margin-top: 6px; }
+  .unit.strong::before { background: var(--turf); }
+  .unit.weak::before { background: var(--flag); box-shadow: 0 0 0 1px var(--flag-ink); }
+  .unit dt { font-weight: 700; }
+  .unit dt span { font-weight: 400; }
+  .unit .rank { font: 800 19px/1 var(--display); text-align: right; }
+  .unit .rank small { font: 400 12px var(--body); color: var(--muted); margin-left: 2px; }
+  .unit .val { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; min-width: 4.5ch; }
+
+  /* Footer */
+  footer { margin: 34px 0 40px; padding-top: 18px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+  footer h2 { font: 800 22px/1 var(--display); color: var(--ink); margin: 0 0 8px; }
+  footer p { margin: 0 0 10px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 0 0 10px; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+  .legend .s::before { background: var(--turf); }
+  .legend .w::before { background: var(--flag); box-shadow: 0 0 0 1px var(--flag-ink); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .drawn .band { animation: draw 700ms cubic-bezier(.2,.7,.2,1) both; }
+    @keyframes draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  }
+  @media (max-width: 380px) {
+    .matchup { font-size: 30px; }
+    .unit { font-size: 13.5px; gap: 6px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="mast">
+    <h1 id="headline">Today's mismatches</h1>
+    <p class="sub" id="sub"></p>
+    <p class="stale" id="stale" hidden></p>
+  </header>
+</div>
+<nav class="bar" aria-label="Leagues">
+  <div class="wrap">
+    <div class="tabs" id="tabs"></div>
+    <label class="filter"><input type="checkbox" id="closeOnly"> Only games that are close overall</label>
+  </div>
+</nav>
+<main class="wrap" id="board"></main>
+<div class="wrap">
+  <footer>
+    <h2>How to read this</h2>
+    <p>Each bar is the whole league, worst on the left and best on the right. The two dots show the units squaring off in that stat.</p>
+    <div class="legend"><span class="s">Unit with the edge</span><span class="w">Unit it's up against</span></div>
+    <p>Ranks are adjusted for strength of schedule. The number after each rank is the raw season average (for a defense, what it allows). Stats that are still mostly small-sample noise are left out until they settle.</p>
+    <p id="csvs"></p>
+    <p>Box-score stats from ESPN, refreshed every morning. No injury or lineup info, so check who's playing.</p>
+  </footer>
+</div>
+<script id="data" type="application/json">/*__DATA__*/{}</script>
+<script>
+(function () {
+  "use strict";
+  var DATA = {};
+  try { DATA = JSON.parse(document.getElementById("data").textContent); } catch (e) {}
+  var leagues = DATA.leagues || [];
+  var esc = function (s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  };
+  var plural = function (n, w) { return n + " " + w + (n === 1 ? "" : "s"); };
+
+  // Masthead
+  var totalGames = leagues.reduce(function (a, l) { return a + l.games.length; }, 0);
+  if (DATA.day) {
+    document.getElementById("headline").textContent = DATA.day + "'s mismatches";
+    document.title = DATA.day + "'s mismatches";
+    document.getElementById("sub").textContent =
+      DATA.date_label + ". Updated " + DATA.time_label + ". " +
+      (totalGames ? plural(totalGames, "game") + " flagged." : "Nothing flagged.");
+    var now = new Date();
+    var today = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+    if (DATA.date && DATA.date < today) {
+      var st = document.getElementById("stale");
+      st.textContent = "This board is from " + DATA.date_label + ". Today's update hasn't run yet, so check back shortly.";
+      st.hidden = false;
+    }
+  } else {
+    document.getElementById("sub").textContent = "No data yet. The first update will fill this in.";
+  }
+
+  // Spreadsheet links
+  var csvs = leagues.filter(function (l) { return l.csv; });
+  if (csvs.length) {
+    document.getElementById("csvs").innerHTML = "Every team's rank in every stat: " + csvs.map(function (l) {
+      return '<a href="' + esc(l.csv) + '">' + esc(l.name) + "</a>";
+    }).join(", ") + ".";
+  }
+
+  // State
+  var keys = ["all"].concat(leagues.map(function (l) { return l.key; }));
+  var current = keys.indexOf(location.hash.slice(1)) >= 0 ? location.hash.slice(1) : "all";
+  var closeOnly = false;
+  var drawnOnce = false;
+
+  function field(m) {
+    var lo = Math.min(m.weak.pct, m.strong.pct), hi = Math.max(m.weak.pct, m.strong.pct);
+    return '<div class="field" role="img" aria-label="' + esc(m.strong.abbr) + " near the top of the league, " +
+      esc(m.weak.abbr) + ' near the bottom">' +
+      '<span class="band" style="--lo:' + lo + ";--hi:" + hi + '"></span>' +
+      '<span class="pin weak" style="--p:' + m.weak.pct + '"><b>' + esc(m.weak.abbr) + "</b></span>" +
+      '<span class="pin strong" style="--p:' + m.strong.pct + '"><b>' + esc(m.strong.abbr) + "</b></span></div>";
+  }
+  function unit(u, cls, n) {
+    return '<div class="unit ' + cls + '"><dt>' + esc(u.abbr) + " <span>" + esc(u.unit) + "</span></dt>" +
+      '<dd class="rank">#' + u.rank + "<small>/" + n + "</small></dd>" +
+      '<dd class="val">' + esc(u.value) + "</dd></div>";
+  }
+  function game(g) {
+    var ranks = g.away.rank && g.home.rank ? " Overall #" + g.away.rank + " vs #" + g.home.rank + "." : "";
+    var html = '<article class="game"><div class="ghead"><h3 class="matchup"><span>' + esc(g.away.abbr) +
+      '</span><span class="at">' + (g.neutral ? "vs" : "at") + "</span><span>" + esc(g.home.abbr) + "</span></h3>" +
+      '<p class="when">' + esc(g.when) + "</p></div>" +
+      '<p class="names">' + esc(g.away.name) + (g.neutral ? " vs " : " at ") + esc(g.home.name) + "." + ranks + "</p>" +
+      (g.close ? '<span class="even">Close game overall</span>' : "");
+    g.mismatches.forEach(function (m) {
+      html += '<section class="mm"><div class="mhead"><h4>' + esc(m.metric) + "</h4>" +
+        (m.new ? '<span class="new">New</span>' : "") +
+        '<span class="gap">' + m.gap + "-point gap</span></div>" + field(m) +
+        '<dl class="units">' + unit(m.strong, "strong", m.n) + unit(m.weak, "weak", m.n) + "</dl></section>";
+    });
+    return html + "</article>";
+  }
+  function visibleGames(l) { return l.games.filter(function (g) { return !closeOnly || g.close; }); }
+
+  function render() {
+    var tabs = document.getElementById("tabs");
+    tabs.innerHTML = keys.map(function (k) {
+      var l = leagues.filter(function (x) { return x.key === k; })[0];
+      var label = k === "all" ? "All" : l.short;
+      var n = k === "all" ? leagues.reduce(function (a, x) { return a + visibleGames(x).length; }, 0) : visibleGames(l).length;
+      return '<button class="tab" type="button" data-k="' + k + '" aria-pressed="' + (k === current) + '">' +
+        esc(label) + '<span class="n">' + n + "</span></button>";
+    }).join("");
+
+    var shown = current === "all" ? leagues : leagues.filter(function (l) { return l.key === current; });
+    var out = "";
+    shown.forEach(function (l) {
+      var gs = visibleGames(l);
+      if (current === "all" && !gs.length) return;
+      out += '<section class="league" id="lg-' + esc(l.key) + '"><header class="lghead"><h2>' + esc(l.name) + "</h2>" +
+        '<p class="count">' + (gs.length ? plural(gs.length, "game") + " flagged" : "") + "</p></header>" +
+        (l.note ? '<p class="note">' + esc(l.note) + "</p>" : "");
+      out += gs.length ? gs.map(game).join("") :
+        '<p class="empty">' + (closeOnly && l.games.length ? "No close games with a mismatch. Clear the filter to see all " + plural(l.games.length, "game") + "." :
+          "No lopsided matchups on this slate.") + "</p>";
+      out += "</section>";
+    });
+    if (!out) {
+      out = '<p class="empty" style="padding-top:26px">' + (closeOnly ? "No close games with a mismatch today. Clear the filter to see everything." :
+        "No lopsided matchups across any league today.") + "</p>" +
+        leagues.filter(function (l) { return l.note; }).map(function (l) {
+          return '<p class="note"><strong>' + esc(l.name) + ":</strong> " + esc(l.note) + "</p>";
+        }).join("");
+    }
+    var board = document.getElementById("board");
+    board.innerHTML = out;
+    if (!drawnOnce) { board.classList.add("drawn"); drawnOnce = true; } else { board.classList.remove("drawn"); }
+  }
+
+  document.getElementById("tabs").addEventListener("click", function (e) {
+    var b = e.target.closest(".tab");
+    if (!b) return;
+    current = b.getAttribute("data-k");
+    try { history.replaceState(null, "", current === "all" ? location.pathname : "#" + current); } catch (err) {}
+    render();
+  });
+  document.getElementById("closeOnly").addEventListener("change", function (e) {
+    closeOnly = e.target.checked;
+    render();
+  });
+  window.addEventListener("hashchange", function () {
+    var h = location.hash.slice(1);
+    if (keys.indexOf(h) >= 0) { current = h; render(); }
+  });
+  render();
+})();
+</script>
+</body>
+</html>

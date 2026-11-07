@@ -54,7 +54,7 @@ for _stream in (sys.stdout, sys.stderr):
 VERSION = "1.0"
 BASE_DIR = Path(os.environ.get("MATCHUP_BOT_HOME", Path(__file__).resolve().parent))
 CACHE_DIR = BASE_DIR / "cache"
-REPORT_DIR = BASE_DIR / "reports"
+REPORT_DIR = BASE_DIR / "site"
 STATE_FILE = BASE_DIR / "state" / "sent_alerts.json"
 LOG_FILE = BASE_DIR / "logs" / "last_run.log"
 CONFIG_FILE = BASE_DIR / "config.toml"
@@ -65,13 +65,13 @@ USER_AGENT = "Mozilla/5.0 (compatible; matchup-bot/1.0)"
 log = logging.getLogger("matchup_bot")
 
 LEAGUES = {
-    "nfl": {"name": "NFL", "sport": "football", "path": "football/nfl",
+    "nfl": {"short": "NFL", "name": "NFL", "sport": "football", "path": "football/nfl",
             "groups": None, "emoji": "🏈", "tag": "football", "season_start": (8, 1)},
-    "ncaaf": {"name": "College Football", "sport": "football", "path": "football/college-football",
+    "ncaaf": {"short": "CFB", "name": "College Football", "sport": "football", "path": "football/college-football",
               "groups": "80", "emoji": "🏈", "tag": "football", "season_start": (8, 1)},
-    "nba": {"name": "NBA", "sport": "basketball", "path": "basketball/nba",
+    "nba": {"short": "NBA", "name": "NBA", "sport": "basketball", "path": "basketball/nba",
             "groups": None, "emoji": "🏀", "tag": "basketball", "season_start": (10, 1)},
-    "ncaab": {"name": "College Basketball", "sport": "basketball",
+    "ncaab": {"short": "CBB", "name": "College Basketball", "sport": "basketball",
               "path": "basketball/mens-college-basketball",
               "groups": "50", "emoji": "🏀", "tag": "basketball", "season_start": (10, 1)},
 }
@@ -833,74 +833,56 @@ def write_rank_csv(key: str, R: Ratings, names_full: dict) -> Path:
     return path
 
 
-REPORT_CSS = """
-body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;background:#f6f7f9;color:#1d2330}
-header{background:#14213d;color:#fff;padding:22px 28px}
-header h1{margin:0;font-size:22px} header p{margin:6px 0 0;opacity:.8;font-size:13px}
-main{max-width:1100px;margin:0 auto;padding:20px}
-section{background:#fff;border-radius:10px;padding:18px 20px;margin-bottom:18px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-h2{margin:0 0 4px;font-size:19px} .sub{color:#667085;font-size:13px;margin-bottom:12px}
-.game{border-top:1px solid #eaecf0;padding:12px 0}
-.game h3{margin:0 0 6px;font-size:15px} .game h3 span{font-weight:400;color:#667085;font-size:13px}
-table{border-collapse:collapse;width:100%;font-size:13px}
-td,th{padding:6px 8px;text-align:left;border-bottom:1px solid #f2f4f7}
-th{color:#667085;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.03em}
-.edge{font-weight:700;color:#0b6e4f} .weak{color:#b42318}
-.gap{font-variant-numeric:tabular-nums;font-weight:700}
-.badge{display:inline-block;font-size:11px;padding:1px 7px;border-radius:9px;margin-left:6px;background:#fff4e5;color:#b54708}
-.new{background:#e8f5ee;color:#0b6e4f}
-.empty{color:#667085;font-style:italic}
-"""
+SITE_TEMPLATE = BASE_DIR / "site_template.html"
 
 
-def write_report(results: list, run_at: dt.datetime) -> Path:
-    REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    esc = html.escape
-    out = [f"<!DOCTYPE html><html><head><meta charset='utf-8'><title>Matchup Bot · {run_at:%b %d}</title>"
-           f"<meta name='viewport' content='width=device-width,initial-scale=1'><style>{REPORT_CSS}</style></head><body>",
-           f"<header><h1>Matchup Bot report</h1><p>Run {esc(fmt_time(run_at))} · "
-           f"ranks are schedule-adjusted; values shown are raw season averages</p></header><main>"]
+def site_payload(results: list, run_at: dt.datetime) -> dict:
+    leagues = []
     for res in results:
-        lg = res["league"]
-        out.append(f"<section><h2>{lg['emoji']} {esc(lg['name'])}</h2>")
-        if res.get("note"):
-            out.append(f"<div class='sub'>{esc(res['note'])}</div>")
-        alerts = res.get("alerts") or []
-        if not alerts:
-            out.append("<p class='empty'>No mismatches over your thresholds.</p></section>")
-            continue
-        names, R, new_keys = res["names"], res["ratings"], res["new_keys"]
-        for g in alerts:
+        lg, R = res["league"], res.get("ratings")
+        names, full = res.get("names", {}), res.get("names_full", {})
+        games = []
+        for g in res.get("alerts") or []:
             ev = g.event
             a, h = ev["teams"]
-            pa, ph = R.power_rank.get(a["id"]), R.power_rank.get(h["id"])
-            overall = f" · overall #{pa} vs #{ph}" if pa and ph else ""
-            badge = "<span class='badge'>evenly matched overall</span>" if close_game_tag(g) else ""
-            out.append(f"<div class='game'><h3>{esc(a['name'])} {'vs' if ev['neutral'] else '@'} "
-                       f"{esc(h['name'])} <span>{esc(fmt_time(local_dt(ev['date'])))}{overall}</span>{badge}</h3>")
-            out.append("<table><tr><th>Metric</th><th>Edge</th><th>Opposing unit</th><th>Gap</th></tr>")
+            rows = []
             for mm in g.mismatches:
                 m = mm.metric
-                off = (names[mm.off_team], m.off_unit, mm.off_rank, m.show(mm.off_val))
-                dfn = (names[mm.def_team], m.def_unit, mm.def_rank, m.show(mm.def_val))
+                off = {"abbr": names.get(mm.off_team, "?"), "unit": m.off_unit, "rank": mm.off_rank,
+                       "value": m.show(mm.off_val), "pct": round(mm.off_pct, 1)}
+                dfn = {"abbr": names.get(mm.def_team, "?"), "unit": m.def_unit, "rank": mm.def_rank,
+                       "value": m.show(mm.def_val), "pct": round(mm.def_pct, 1)}
                 strong, weak = (off, dfn) if mm.offense_favored else (dfn, off)
-                is_new = "<span class='badge new'>new</span>" if mm.key(res["key"], ev["id"]) in new_keys else ""
-                out.append(
-                    f"<tr><td>{esc(m.label)}{is_new}</td>"
-                    f"<td class='edge'>{esc(strong[0])} {esc(strong[1])} #{strong[2]} ({esc(strong[3])})</td>"
-                    f"<td class='weak'>{esc(weak[0])} {esc(weak[1])} #{weak[2]} ({esc(weak[3])})</td>"
-                    f"<td class='gap'>{mm.gap:.0f}</td></tr>")
-            out.append("</table></div>")
-        out.append("</section>")
-    out.append("<p class='sub' style='text-align:center'>Gap = percentile difference between the two units "
-               "(100 = best-in-league vs worst-in-league). Full team ranks are in the *_team_ranks.csv files.</p>"
-               "</main></body></html>")
-    page = "\n".join(out)
-    dated = REPORT_DIR / f"matchups_{run_at:%Y-%m-%d}.html"
-    dated.write_text(page, encoding="utf-8")
-    latest = REPORT_DIR / "latest.html"
-    latest.write_text(page, encoding="utf-8")
-    return latest
+                rows.append({"metric": m.label, "gap": round(mm.gap), "n": mm.n, "strong": strong,
+                             "weak": weak, "new": mm.key(res["key"], ev["id"]) in res["new_keys"]})
+            games.append({
+                "id": ev["id"], "when": fmt_time(local_dt(ev["date"])), "neutral": ev["neutral"],
+                "away": {"abbr": a["abbr"], "name": full.get(a["id"], a["name"]),
+                         "rank": R.power_rank.get(a["id"]) if R else None},
+                "home": {"abbr": h["abbr"], "name": full.get(h["id"], h["name"]),
+                         "rank": R.power_rank.get(h["id"]) if R else None},
+                "close": g.overall_gap is not None and g.overall_gap <= 25,
+                "mismatches": rows})
+        leagues.append({"key": res["key"], "name": lg["name"], "short": lg["short"],
+                        "note": res.get("note", ""), "n_teams": res.get("n_teams"),
+                        "csv": f"{res['key']}_team_ranks.csv" if res.get("csv") else None,
+                        "games": games})
+    hour = run_at.hour % 12 or 12
+    return {"generated": run_at.isoformat(), "date": run_at.date().isoformat(),
+            "day": run_at.strftime("%A"), "date_label": f"{run_at:%A}, {run_at:%B} {run_at.day}",
+            "time_label": f"{hour}:{run_at:%M} {'AM' if run_at.hour < 12 else 'PM'}",
+            "leagues": leagues}
+
+
+def build_site(results: list, run_at: dt.datetime) -> Path:
+    """Write site/index.html: the morning board (data embedded, so it also opens from disk)."""
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    data = json.dumps(site_payload(results, run_at), ensure_ascii=False).replace("</", "<\\/")
+    page = SITE_TEMPLATE.read_text(encoding="utf-8").replace("/*__DATA__*/{}", data)
+    out = REPORT_DIR / "index.html"
+    out.write_text(page, encoding="utf-8")
+    (REPORT_DIR / ".nojekyll").write_text("", encoding="utf-8")
+    return out
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -914,6 +896,9 @@ def load_config() -> dict:
     else:
         log.warning("config.toml not found; using defaults (no notifications).")
     cfg.setdefault("notify", {})
+    for env, k in (("NTFY_TOPIC", "ntfy_topic"), ("DISCORD_WEBHOOK", "discord_webhook")):
+        if os.environ.get(env, "").strip():  # GitHub secrets arrive as env vars
+            cfg["notify"][k] = os.environ[env].strip()
     cfg.setdefault("analysis", {})
     cfg.setdefault("metrics", {})
     cfg.setdefault("leagues", {})
@@ -982,13 +967,14 @@ def run_league(key: str, cfg: dict, today: dt.date, workers: int) -> dict:
         return res
 
     write_rank_csv(key, R, names_full)
+    res["csv"] = True
     disabled = set(cfg["metrics"].get("disabled", []))
     min_rel = float(cfg["analysis"].get("min_reliability", 0.3))
     alerts, skipped = find_mismatches(list(upcoming.values()), R, lc, disabled, min_rel)
     n_teams = len(R.teams)
     noisy = [m.label for m in R.metrics if m.key not in disabled and not R.usable(m.key, min_rel)]
     active = len([m for m in R.metrics if m.key not in disabled]) - len(noisy)
-    res.update(alerts=alerts, ratings=R, names=names_abbr, n_teams=n_teams)
+    res.update(alerts=alerts, ratings=R, names=names_abbr, names_full=names_full, n_teams=n_teams)
     res["note"] = (f"{len(upcoming)} upcoming games scanned, {n_teams} teams ranked, "
                    f"{active} metrics in use"
                    + (f"; {len(skipped)} games skipped (a team has under {lc['min_games']} games)"
@@ -1069,7 +1055,7 @@ def main(argv=None) -> int:
 
     if not args.dry_run:
         _write_json(STATE_FILE, state)
-    report = write_report(results, run_at)
+    report = build_site(results, run_at)
     log.info("Report: %s", report)
     if not (args.no_open or args.scheduled):
         try:

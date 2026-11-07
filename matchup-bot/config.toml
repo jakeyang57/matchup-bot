@@ -4,9 +4,12 @@
 
 [notify]
 # Phone alerts through the free "ntfy" app (iPhone + Android, no account needed).
-# Install ntfy, tap +, and subscribe to this exact topic name. Anyone who knows the
-# name can read your alerts, so keep it random.
-ntfy_topic = "jake-matchups-38ff91b6"
+# Your topic is: jake-matchups-38ff91b6   (subscribe to it in the ntfy app)
+#
+# Using the GitHub website setup? Leave this blank and add the topic as the
+# NTFY_TOPIC secret instead (README step 5), so it isn't public in your repo.
+# Running only on your own PC? Paste the topic between the quotes.
+ntfy_topic = ""
 ntfy_server = "https://ntfy.sh"
 
 # Optional: also post alerts to a Discord channel.
